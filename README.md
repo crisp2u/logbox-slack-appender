@@ -1,4 +1,4 @@
 logbox-slack-appender
 =====================
 
-A Slack.com appender for Logbox
+A [slack.com](http://slack.com) appender for [Logbox](http://wiki.coldbox.org/wiki/LogBox.cfm)
