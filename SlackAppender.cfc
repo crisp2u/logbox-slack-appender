@@ -1,4 +1,5 @@
 ﻿<cfcomponent extends="coldbox.system.logging.AbstractAppender" output="false">
+	<cfproperty name="environment" inject="coldbox:setting:Environment" />
 
 	<cffunction name="init" access="public" output="false" returntype="SlackAppender">
 		<cfargument name="name" 		required="true" hint="The unique name for this appender."/>
@@ -36,25 +37,40 @@
 		<cfscript>
 			var loge = arguments.logEvent;
 			var payload = StructNew();
-			var entry = "";
+			var entry = StructNew();
+			var fields = [];
+			payload["attachments"] = [];
+			entry["fallback"] = "#loge.getMessage()# [#loge.getCategory()#]";
+			entry["pretext"] = "#loge.getMessage()# [#loge.getCategory()#]";
+			entry["color"] = "##D00000";
+			
+
+			ArrayAppend(fields,{
+				"title" = "Name",
+				"value" = "#getApplicationMetadata().name#"
+				
+			});
+			ArrayAppend(fields,{
+				"title" = "Environment",
+				"value" = "#getColdbox().getSetting('environment')#"
+				
+			});
+			ArrayAppend(fields,{
+				"title" = "Time",
+				"value" = "#DateFormat(loge.getTimeStamp(), 'dd-mmm-yyyyy')# #TimeFormat(loge.getTimeStamp(), 'HH:mm:ss')#"
+			});
+
+			if(Len(loge.getExtraInfo())){
+				ArrayAppend(fields, {
+						"title" = "Extra Info Dump",
+			            "value" = "#loge.getExtraInfo()#",
+			            "short" = "false"
+				});
+			}
+			entry["fields"] = fields;
+			payload.attachments[1] = entry;
 		</cfscript>
 		<cftry>
-			<cfsavecontent variable="entry">
-			<cfoutput>
-			<p>TimeStamp: #loge.getTimeStamp()#</p>
-			<p>Severity: #loge.getSeverity()#</p>
-			<p>Category: #loge.getCategory()#</p>
-			<hr/>
-			<p>#loge.getMessage()#</p>
-			<hr/>
-			<p>Extra Info Dump:</p>
-			<cfdump var="#loge.getExtraInfo()#" format="text" >
-			</cfoutput>
-			</cfsavecontent>
-			<cfset payload["text"] = entry>
-			<cfif getProperty("channel") neq "">
-				<cfset payload["channel"] = getProperty("channel")> 
-			</cfif> 
 			<cfhttp url="#getProperty("webhookURL")#" method="post" throwonerror="true" multiparttype="" result="slackres">
 				<cfhttpparam type="body" value="#SerializeJSON(payload)#">
 			</cfhttp>
