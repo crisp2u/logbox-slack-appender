@@ -1,20 +1,12 @@
-﻿<cfcomponent extends="coldbox.system.logging.AbstractAppender" output="false">
-	<cfproperty name="environment" inject="coldbox:setting:Environment" />
+component  extends="coldbox.system.logging.AbstractAppender" displayname="SlackAppender" output="false"{
+	
+	public SlackAppender function init(required  name, properties="#StructNew()#", layout="", levelMin="0", levelMax="4")
+	 output="false"{
 
-	<cffunction name="init" access="public" output="false" returntype="SlackAppender">
-		<cfargument name="name" 		required="true" hint="The unique name for this appender."/>
-		<cfargument name="properties" 	required="false" default="#structnew()#" hint="A map of configuration properties for the appender"/>
-		<cfargument name="layout" 		required="false" default="" hint="The layout class to use in this appender for custom message rendering."/>
-		<cfargument name="levelMin"  	required="false" default="0" hint="The default log level for this appender, by default it is 0. Optional. ex: LogBox.logLevels.WARN"/>
-		<cfargument name="levelMax"  	required="false" default="4" hint="The default log level for this appender, by default it is 5. Optional. ex: LogBox.logLevels.WARN"/>
-		<cfscript>
-			// Init supertype
+		// Init supertype
+
 			super.init(argumentCollection=arguments);
 			
-			// valid columns
-			instance.columns = "id,severity,category,logdate,appendername,message,extrainfo";
-			// UUID generator
-			instance.uuid = createobject("java", "java.util.UUID");
 			// Verify properties
 			if( NOT propertyExists('webhookURL') ){ 
 				$throw(message="No webhookURL property defined",type="SlackAppender.InvalidProperty"); 
@@ -27,58 +19,61 @@
 				setProperty("username",'');
 			}
 			return this;
-		</cfscript>
-	</cffunction>
-	<!--- Log Message --->
-	<cffunction name="logMessage" access="public" output="false" returntype="void" hint="Write an entry into the logger.">
-		<!--- ************************************************************* --->
-		<cfargument name="logEvent" type="any" required="true" hint="The logging event"/>
-		<!--- ************************************************************* --->
-		<cfscript>
-			var loge = arguments.logEvent;
-			var payload = StructNew();
-			var entry = StructNew();
-			var fields = [];
-			payload["attachments"] = [];
-			entry["fallback"] = "#loge.getMessage()# [#loge.getCategory()#]";
-			entry["pretext"] = "#loge.getMessage()# [#loge.getCategory()#]";
-			entry["color"] = "##D00000";
+	}
+
+	public function logMessage(required any logEvent hint="The logging event") {
+		var loge = arguments.logEvent;
+		var payload = "";
+		
+		var message = {"text" = "", "channel"="", "attachments" = []};
+		var attachment = {};
+		var fields = [];
+		var field = {};
+
+		message.text = loge.getMessage();
+		message.channel = getProperty("channel");
+
+		attachment = {
+			"fallback" = "", 
+			"color" = "##D00000", 
+			"text" = "", 
+			"pretext" = "", 
+			"fields" = []
+		};
+
+		//Application name field
+
+		field = {
+			"title"="Name", 
+			"value"="#getApplicationMetadata().name#", 
+			"short"= true
+		};
+
+		ArrayAppend(attachment.fields, field);
+
+
+		//Add attachement to message attachements
+		ArrayAppend(message.attachments, attachment);
+
+		
+		payload = SerializeJSON(message);
+
+		//Send payload to Slack 
+		var httpService = new http();
+
+		try{
+			httpService.setUrl(getProperty("webhookURL"));
+			httpService.setMethod("post");
+			httpService.addParam(type="body", value="#payload#");
+			httpService.addParam(type="header", name="Content-Type", value="application/json");
+			httpService.addParam(type="header", name="Accept", value="application/json");
+			var result = httpService.send().getPrefix();
 			
-
-			ArrayAppend(fields,{
-				"title" = "Name",
-				"value" = "#getApplicationMetadata().name#"
-				
-			});
-			ArrayAppend(fields,{
-				"title" = "Environment",
-				"value" = "#getColdbox().getSetting('environment')#"
-				
-			});
-			ArrayAppend(fields,{
-				"title" = "Time",
-				"value" = "#DateFormat(loge.getTimeStamp(), 'dd-mmm-yyyyy')# #TimeFormat(loge.getTimeStamp(), 'HH:mm:ss')#"
-			});
-
-			if(Len(loge.getExtraInfo())){
-				ArrayAppend(fields, {
-						"title" = "Extra Info Dump",
-			            "value" = "#loge.getExtraInfo()#",
-			            "short" = "false"
-				});
+			if(!(result.statuscode contains "201")){
+				throw("There was a problem sending payload to Slack. Status code: " & result.statuscode, "SlackAppender.HTTP_SEND_ERROR" );
 			}
-			entry["fields"] = fields;
-			payload.attachments[1] = entry;
-		</cfscript>
-		<cftry>
-			<cfhttp url="#getProperty("webhookURL")#" method="post" throwonerror="true" multiparttype="" result="slackres">
-				<cfhttpparam type="body" value="#SerializeJSON(payload)#">
-			</cfhttp>
-			<cfset $log("DEBUG","slack appender response #slackres#")>
-			<cfcatch>
-				<cfset $log("ERROR","Error sending message to slack.com from appender #getName()#. #cfcatch.message# #cfcatch.detail# #cfcatch.stacktrace#")>
-			</cfcatch>			
-		</cftry>		
-	</cffunction>
-
-</cfcomponent>
+		}catch(any e){
+			$log("ERROR","Error sending message to slack.com from appender #getName()#. #e.message# #e.detail# #e.stacktrace#");
+		} 
+	}
+}
