@@ -97,7 +97,7 @@ component {
 		// Custom Declared Interceptors
 		interceptors = [
 		];
-
+		
 		// Binder Mappings
 		// binder.map("Alias").to("#moduleMapping#.model.MyService");
 		binder.map("SlackService@slackappender").to("#moduleMapping#.model.SlackService");
@@ -109,14 +109,47 @@ component {
 	* Fired when the module is registered and activated.
 	*/
 	function onLoad(){
-
+		loadAppenders();
 	}
 
 	/**
 	* Fired when the module is unregistered and unloaded
 	*/
 	function onUnload(){
+		
+	}
+	
+	// load LogBox appenders
+	private function loadAppenders(){
+		// Get config
+		var logBoxConfig 	= controller.getLogBox().getConfig();
+		var rootConfig 		= "";
 
+		rootConfig = logBoxConfig.getRoot();
+		logBoxConfig.appender(
+				name="SlackAppender", 
+				class="#moduleMapping#.model.SlackAppender",
+				properties={
+					webhookURL = "https://ngn-power.slack.com/services/hooks/incoming-webhook?token=6AGstDGAzLeINGEx6i3Aofmu",
+					channel = "##deployments"
+				}
+		);
+		
+
+		// Store back config
+		controller.getLogBox().configure( logBoxConfig );
+	}
+
+	public function development(){
+		logBox.getConfig().category(name="Slack", levelMin="FATAL", levelMax="ERROR",appenders="SlackAppender");
+	}
+	
+	public function qa(){
+		logBox.getConfig().category(name="Slack", levelMin="FATAL", levelMax="INFO",appenders="SlackAppender");
+	}
+
+	public function prod(){
+		logBox.getConfig().category(name="Slack", levelMin="FATAL", levelMax="INFO",appenders="SlackAppender");
 	}
 
 }
